@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { GraphService } from "./graph.service";
+import { InsightService } from "../insight/insight.service";
 import {
   GraphMessage,
   SyncResult,
@@ -14,6 +15,7 @@ export class EmailService {
   constructor(
     private prisma: PrismaService,
     private graphService: GraphService,
+    private insightService: InsightService,
   ) {}
 
   async getThreads(userId: string): Promise<ThreadListResponse> {
@@ -63,6 +65,25 @@ export class EmailService {
       throw new NotFoundException("Thread not found");
     }
 
+    let insight = thread.insight;
+
+    if (!insight && thread.emails.length > 0) {
+      insight = await this.insightService.generateInsight(
+        threadId,
+        thread.emails.map((e) => ({
+          fromAddress: e.fromAddress,
+          fromName: e.fromName,
+          subject: e.subject,
+          body: e.body,
+          receivedAt: e.receivedAt,
+          attachments: e.attachments.map((a) => ({
+            filename: a.filename,
+            mimeType: a.mimeType,
+          })),
+        })),
+      );
+    }
+
     return {
       id: thread.id,
       subject: thread.subject,
@@ -80,18 +101,18 @@ export class EmailService {
           size: a.size,
         })),
       })),
-      insight: thread.insight
+      insight: insight
         ? {
-            summary: thread.insight.summary,
-            participants: thread.insight.participants as string[],
-            topics: thread.insight.topics as string[],
-            actionItems: thread.insight.actionItems as {
+            summary: insight.summary,
+            participants: insight.participants as string[],
+            topics: insight.topics as string[],
+            actionItems: insight.actionItems as {
               task: string;
               owner: string;
             }[],
-            urgency: thread.insight.urgency,
-            requiresResponse: thread.insight.requiresResponse,
-            attachmentOverview: thread.insight.attachmentOverview as {
+            urgency: insight.urgency,
+            requiresResponse: insight.requiresResponse,
+            attachmentOverview: insight.attachmentOverview as {
               count: number;
               types: string[];
               mentions: string[];
