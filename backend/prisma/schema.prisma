@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  emails    Email[]
+  threads   Thread[]
+}
+
+model Thread {
+  id             String         @id @default(uuid())
+  conversationId String
+  userId         String
+  subject        String
+  lastMessageAt  DateTime
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  emails         Email[]
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  insight        ThreadInsight?
+
+  @@unique([userId, conversationId])
+  @@index([userId])
+  @@index([lastMessageAt])
+}
+
+model Email {
+  id              String       @id @default(uuid())
+  messageId       String       @unique
+  threadId        String
+  userId          String
+  fromAddress     String
+  fromName        String?
+  toRecipients    Json
+  ccRecipients    Json
+  subject         String
+  body            String
+  receivedAt      DateTime
+  attachmentCount Int          @default(0)
+  createdAt       DateTime     @default(now())
+  attachments     Attachment[]
+  thread          Thread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([userId])
+  @@index([receivedAt])
+}
+
+model Attachment {
+  id        String   @id @default(uuid())
+  emailId   String
+  filename  String
+  mimeType  String
+  size      Int?
+  createdAt DateTime @default(now())
+  email     Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@index([emailId])
+}
+
+model ThreadInsight {
+  id                 String   @id @default(uuid())
+  threadId           String   @unique
+  summary            String
+  participants       Json
+  topics             Json
+  actionItems        Json
+  urgency            Urgency
+  requiresResponse   Boolean
+  attachmentOverview Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  thread             Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+}
+
+enum Urgency {
+  LOW
+  MEDIUM
+  HIGH
+}
