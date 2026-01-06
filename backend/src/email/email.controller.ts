@@ -1,6 +1,8 @@
 import {
   Controller,
   Post,
+  Get,
+  Param,
   UseGuards,
   UnauthorizedException,
   Logger,
@@ -10,9 +12,13 @@ import { ClerkAuthGuard, User } from "../auth";
 import type { ClerkUser } from "../auth";
 import { AuthService } from "../auth/auth.service";
 import { EmailService } from "./email.service";
-import type { SyncResult } from "./types";
+import type {
+  SyncResult,
+  ThreadListResponse,
+  ThreadDetailResponse,
+} from "./types";
 
-@Controller("email")
+@Controller()
 export class EmailController {
   private readonly logger = new Logger(EmailController.name);
 
@@ -21,7 +27,7 @@ export class EmailController {
     private emailService: EmailService,
   ) {}
 
-  @Post("sync")
+  @Post("email/sync")
   @UseGuards(ClerkAuthGuard)
   async sync(@User() user: ClerkUser): Promise<SyncResult> {
     const oauthToken = await this.authService.getMicrosoftOAuthToken(
@@ -45,5 +51,20 @@ export class EmailController {
       }
       throw new InternalServerErrorException("Failed to sync emails");
     }
+  }
+
+  @Get("threads")
+  @UseGuards(ClerkAuthGuard)
+  async getThreads(@User() user: ClerkUser): Promise<ThreadListResponse> {
+    return this.emailService.getThreads(user.userId);
+  }
+
+  @Get("threads/:id")
+  @UseGuards(ClerkAuthGuard)
+  async getThread(
+    @User() user: ClerkUser,
+    @Param("id") threadId: string,
+  ): Promise<ThreadDetailResponse> {
+    return this.emailService.getThreadById(user.userId, threadId);
   }
 }

@@ -1,7 +1,12 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { GraphService } from "./graph.service";
-import { GraphMessage, SyncResult } from "./types";
+import {
+  GraphMessage,
+  SyncResult,
+  ThreadListResponse,
+  ThreadDetailResponse,
+} from "./types";
 import type { ClerkUser } from "../auth";
 
 @Injectable()
@@ -11,11 +16,104 @@ export class EmailService {
     private graphService: GraphService,
   ) {}
 
+  async getThreads(userId: string): Promise<ThreadListResponse> {
+    const threads = await this.prisma.thread.findMany({
+      where: { userId },
+      orderBy: { lastMessageAt: "desc" },
+      include: {
+        _count: { select: { emails: true } },
+        emails: {
+          select: { attachmentCount: true },
+        },
+        insight: { select: { id: true } },
+      },
+    });
+
+    return {
+      threads: threads.map((thread) => ({
+        id: thread.id,
+        subject: thread.subject,
+        lastMessageAt: thread.lastMessageAt,
+        emailCount: thread._count.emails,
+        attachmentCount: thread.emails.reduce(
+          (sum, e) => sum + e.attachmentCount,
+          0,
+        ),
+        hasInsight: !!thread.insight,
+      })),
+    };
+  }
+
+  async getThreadById(
+    userId: string,
+    threadId: string,
+  ): Promise<ThreadDetailResponse> {
+    const thread = await this.prisma.thread.findFirst({
+      where: { id: threadId, userId },
+      include: {
+        emails: {
+          orderBy: { receivedAt: "desc" },
+          include: { attachments: true },
+        },
+        insight: true,
+      },
+    });
+
+    if (!thread) {
+      throw new NotFoundException("Thread not found");
+    }
+
+    return {
+      id: thread.id,
+      subject: thread.subject,
+      lastMessageAt: thread.lastMessageAt,
+      emails: thread.emails.map((email) => ({
+        id: email.id,
+        fromAddress: email.fromAddress,
+        fromName: email.fromName,
+        subject: email.subject,
+        body: email.body,
+        receivedAt: email.receivedAt,
+        attachments: email.attachments.map((a) => ({
+          filename: a.filename,
+          mimeType: a.mimeType,
+          size: a.size,
+        })),
+      })),
+      insight: thread.insight
+        ? {
+            summary: thread.insight.summary,
+            participants: thread.insight.participants as string[],
+            topics: thread.insight.topics as string[],
+            actionItems: thread.insight.actionItems as {
+              task: string;
+              owner: string;
+            }[],
+            urgency: thread.insight.urgency,
+            requiresResponse: thread.insight.requiresResponse,
+            attachmentOverview: thread.insight.attachmentOverview as {
+              count: number;
+              types: string[];
+              mentions: string[];
+            },
+          }
+        : null,
+    };
+  }
+
   async syncEmails(
     user: ClerkUser,
     oauthToken: string,
     count: number = 20,
   ): Promise<SyncResult> {
+    const existingUserByEmail = await this.prisma.user.findUnique({
+      where: { email: user.email },
+    });
+
+    if (existingUserByEmail && existingUserByEmail.id !== user.userId) {
+      await this.prisma.user.delete({ where: { email: user.email } });
+    }
+
     await this.prisma.user.upsert({
       where: { id: user.userId },
       update: { email: user.email, name: user.name },
@@ -153,4 +251,3 @@ export class EmailService {
     );
   }
 }
-
