@@ -7,6 +7,7 @@ import {
   SyncResult,
   ThreadListResponse,
   ThreadDetailResponse,
+  InsightResponse,
 } from "./types";
 import type { ClerkUser } from "../auth";
 
@@ -65,25 +66,6 @@ export class EmailService {
       throw new NotFoundException("Thread not found");
     }
 
-    let insight = thread.insight;
-
-    if (!insight && thread.emails.length > 0) {
-      insight = await this.insightService.generateInsight(
-        threadId,
-        thread.emails.map((e) => ({
-          fromAddress: e.fromAddress,
-          fromName: e.fromName,
-          subject: e.subject,
-          body: e.body,
-          receivedAt: e.receivedAt,
-          attachments: e.attachments.map((a) => ({
-            filename: a.filename,
-            mimeType: a.mimeType,
-          })),
-        })),
-      );
-    }
-
     return {
       id: thread.id,
       subject: thread.subject,
@@ -101,24 +83,100 @@ export class EmailService {
           size: a.size,
         })),
       })),
-      insight: insight
+      insight: thread.insight
         ? {
-            summary: insight.summary,
-            participants: insight.participants as string[],
-            topics: insight.topics as string[],
-            actionItems: insight.actionItems as {
+            summary: thread.insight.summary,
+            participants: thread.insight.participants as string[],
+            topics: thread.insight.topics as string[],
+            actionItems: thread.insight.actionItems as {
               task: string;
               owner: string;
             }[],
-            urgency: insight.urgency,
-            requiresResponse: insight.requiresResponse,
-            attachmentOverview: insight.attachmentOverview as {
+            urgency: thread.insight.urgency,
+            requiresResponse: thread.insight.requiresResponse,
+            attachmentOverview: thread.insight.attachmentOverview as {
               count: number;
               types: string[];
               mentions: string[];
             },
           }
         : null,
+    };
+  }
+
+  async generateThreadInsight(
+    userId: string,
+    threadId: string,
+  ): Promise<InsightResponse | null> {
+    const thread = await this.prisma.thread.findFirst({
+      where: { id: threadId, userId },
+      include: {
+        emails: {
+          orderBy: { receivedAt: "desc" },
+          include: { attachments: true },
+        },
+        insight: true,
+      },
+    });
+
+    if (!thread) {
+      throw new NotFoundException("Thread not found");
+    }
+
+    if (thread.insight) {
+      return {
+        summary: thread.insight.summary,
+        participants: thread.insight.participants as string[],
+        topics: thread.insight.topics as string[],
+        actionItems: thread.insight.actionItems as {
+          task: string;
+          owner: string;
+        }[],
+        urgency: thread.insight.urgency,
+        requiresResponse: thread.insight.requiresResponse,
+        attachmentOverview: thread.insight.attachmentOverview as {
+          count: number;
+          types: string[];
+          mentions: string[];
+        },
+      };
+    }
+
+    if (thread.emails.length === 0) {
+      return null;
+    }
+
+    const insight = await this.insightService.generateInsight(
+      threadId,
+      thread.emails.map((e) => ({
+        fromAddress: e.fromAddress,
+        fromName: e.fromName,
+        subject: e.subject,
+        body: e.body,
+        receivedAt: e.receivedAt,
+        attachments: e.attachments.map((a) => ({
+          filename: a.filename,
+          mimeType: a.mimeType,
+        })),
+      })),
+    );
+
+    if (!insight) {
+      return null;
+    }
+
+    return {
+      summary: insight.summary,
+      participants: insight.participants as string[],
+      topics: insight.topics as string[],
+      actionItems: insight.actionItems as { task: string; owner: string }[],
+      urgency: insight.urgency,
+      requiresResponse: insight.requiresResponse,
+      attachmentOverview: insight.attachmentOverview as {
+        count: number;
+        types: string[];
+        mentions: string[];
+      },
     };
   }
 

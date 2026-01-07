@@ -16,6 +16,7 @@ import type {
   SyncResult,
   ThreadListResponse,
   ThreadDetailResponse,
+  InsightResponse,
 } from "./types";
 
 @Controller()
@@ -66,5 +67,22 @@ export class EmailController {
     @Param("id") threadId: string,
   ): Promise<ThreadDetailResponse> {
     return this.emailService.getThreadById(user.userId, threadId);
+  }
+
+  @Post("threads/:id/insights")
+  @UseGuards(ClerkAuthGuard)
+  async generateInsight(
+    @User() user: ClerkUser,
+    @Param("id") threadId: string,
+  ): Promise<InsightResponse | null> {
+    try {
+      return await this.emailService.generateThreadInsight(
+        user.userId,
+        threadId,
+      );
+    } catch (error) {
+      this.logger.error("Insight generation failed", error);
+      throw new InternalServerErrorException("Failed to generate insights");
+    }
   }
 }
