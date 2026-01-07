@@ -47,9 +47,10 @@ docker-compose up -d
 **Backend (`backend/.env`):**
 
 ```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/fintch?schema=public"
+DATABASE_URL="postgresql://fintch:fintch_secret@localhost:5432/fintch_db?schema=public"
 CLERK_SECRET_KEY="sk_test_..."
 OPENAI_API_KEY="sk-..."
+FRONTEND_URL=http://localhost:3000
 PORT=3001
 ```
 
