@@ -2,6 +2,14 @@
 
 An email insights application that connects to Outlook, syncs emails, and generates AI-powered insights for email threads.
 
+## Features
+
+- **Microsoft Outlook Integration** - Syncs emails via Microsoft Graph API
+- **Incremental Sync** - Uses delta queries to only fetch new/changed emails after initial sync
+- **AI-Powered Insights** - Generates summaries, action items, and urgency levels using GPT-4o-mini
+- **Smart Caching** - Insights are cached and auto-regenerate when new emails arrive
+- **Modern UI** - Built with Next.js 15, Shadcn UI, and Tailwind CSS
+
 ## Setup and Run Instructions
 
 ### Prerequisites
@@ -112,19 +120,25 @@ Visit `http://localhost:3000`
 | Decision | Rationale | Trade-off |
 |----------|-----------|-----------|
 | Clerk for OAuth | Handles Microsoft OAuth complexity, token refresh, session management | External dependency, less control over auth flow |
+| Delta queries for sync | Only fetches changes after initial sync, much faster | Requires storing cursor per user, scoped to inbox folder |
 | Separate insight generation endpoint | Emails load immediately, insights generate async | Requires two API calls per thread view |
 | GPT-4o-mini over GPT-4 | Cost-effective for structured extraction tasks | Slightly less accurate on complex threads |
 | Thread grouping by conversationId | Microsoft Graph provides this, accurate threading | Relies on Microsoft's threading logic |
 | JSON mode for AI output | Guarantees parseable structured output | Slightly higher latency than plain text |
-| Client-side redirect for auth | Simple implementation with Clerk hooks | Brief flash on protected routes |
+| Insight regeneration on new emails | Insights stay up-to-date automatically | Extra OpenAI call when thread has new emails |
+| useRef for fetch deduplication | Prevents React Strict Mode double-fetching | Slightly more complex effect logic |
 
-### What Could Be Improved
+### Features Implemented
 
-- Background sync jobs instead of manual sync button
-- Webhook for real-time email updates
-- Insight caching and invalidation strategy
-- Pagination for large thread lists
-- Rate limiting and error retry logic
+| Feature | Description |
+|---------|-------------|
+| **Incremental Sync** | Uses Microsoft Graph delta queries - first sync fetches 20 emails, subsequent syncs only fetch changes |
+| **Insight Caching** | AI insights stored in database, regenerated only when new emails arrive in thread |
+| **Error Handling** | Toast notifications for sync success/failure, API errors shown to user |
+| **Last Sync Display** | Shows relative time since last sync, persisted in localStorage |
+| **Thread Deduplication** | Unique constraint on (userId, conversationId) prevents duplicate threads |
+| **Email Deduplication** | Unique constraint on messageId prevents duplicate emails |
+| **Cascade Deletes** | Deleting a thread removes all related emails, attachments, and insights |
 
 ---
 
@@ -188,10 +202,10 @@ Respond with a JSON object containing:
 │ id (PK)         │──┐    │ id (PK)         │
 │ email (unique)  │  │    │ conversationId  │
 │ name            │  └───<│ userId (FK)     │
-│ createdAt       │       │ subject         │
-│ updatedAt       │       │ lastMessageAt   │
-└─────────────────┘       │ createdAt       │
-                          │ updatedAt       │
+│ deltaLink       │       │ subject         │
+│ createdAt       │       │ lastMessageAt   │
+│ updatedAt       │       │ createdAt       │
+└─────────────────┘       │ updatedAt       │
                           └────────┬────────┘
                                    │
          ┌─────────────────────────┼─────────────────────────┐
@@ -220,7 +234,7 @@ Respond with a JSON object containing:
 
 | Model | Purpose |
 |-------|---------|
-| **User** | Stores Clerk user data (id synced from Clerk) |
+| **User** | Stores Clerk user data and delta sync cursor |
 | **Thread** | Groups emails by Microsoft's conversationId |
 | **Email** | Individual email messages with metadata |
 | **Attachment** | File attachments linked to emails |
@@ -230,6 +244,7 @@ Respond with a JSON object containing:
 
 - `Thread(userId, conversationId)` - Unique constraint for user-scoped threads
 - `Thread(lastMessageAt)` - Sorting by most recent activity
+- `Email(messageId)` - Unique constraint for deduplication
 - `Email(threadId)` - Fast thread email lookups
 - `Email(receivedAt)` - Chronological ordering
 
@@ -243,3 +258,15 @@ Respond with a JSON object containing:
 
 All relationships use `onDelete: Cascade` for clean data removal.
 
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/email/sync` | Sync emails from Outlook (incremental after first sync) |
+| `GET` | `/threads` | List all threads for authenticated user |
+| `GET` | `/threads/:id` | Get thread details with emails |
+| `POST` | `/threads/:id/insights` | Generate or retrieve cached AI insight |
+
+All endpoints require Bearer token authentication via Clerk.
