@@ -68,7 +68,7 @@ export default function RootLayout({
               </div>
             </div>
           </header>
-          <main className="container py-6">{children}</main>
+          <main className="container py-6 mx-auto">{children}</main>
           <Toaster richColors position="bottom-right" />
         </body>
       </html>

@@ -60,6 +60,8 @@ export interface SyncResult {
   threadsCreated: number;
   threadsUpdated: number;
   emailsSynced: number;
+  emailsDeleted: number;
   attachmentsSynced: number;
+  isIncremental: boolean;
 }
 

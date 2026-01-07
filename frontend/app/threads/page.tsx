@@ -47,7 +47,12 @@ export default function ThreadsPage() {
     try {
       const result = await api<SyncResult>("/email/sync", { method: "POST" });
       updateLastSync();
-      toast.success(`Synced ${result.emailsSynced} emails`);
+      const syncType = result.isIncremental ? "Incremental" : "Full";
+      const parts = [];
+      if (result.emailsSynced > 0) parts.push(`${result.emailsSynced} new`);
+      if (result.emailsDeleted > 0) parts.push(`${result.emailsDeleted} deleted`);
+      const message = parts.length > 0 ? parts.join(", ") : "No changes";
+      toast.success(`${syncType} sync: ${message}`);
       await fetchThreads();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Sync failed";

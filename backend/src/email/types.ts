@@ -34,11 +34,23 @@ export interface GraphMessagesResponse {
   value: GraphMessage[];
 }
 
+export interface GraphDeltaMessage extends GraphMessage {
+  "@removed"?: { reason: string };
+}
+
+export interface GraphDeltaResponse {
+  value: GraphDeltaMessage[];
+  "@odata.deltaLink"?: string;
+  "@odata.nextLink"?: string;
+}
+
 export interface SyncResult {
   threadsCreated: number;
   threadsUpdated: number;
   emailsSynced: number;
+  emailsDeleted: number;
   attachmentsSynced: number;
+  isIncremental: boolean;
 }
 
 export interface ThreadListItem {

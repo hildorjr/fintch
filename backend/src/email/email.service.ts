@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { GraphService } from "./graph.service";
 import { InsightService } from "../insight/insight.service";
 import {
-  GraphMessage,
+  GraphDeltaMessage,
   SyncResult,
   ThreadListResponse,
   ThreadDetailResponse,
@@ -13,6 +13,8 @@ import type { ClerkUser } from "../auth";
 
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
+
   constructor(
     private prisma: PrismaService,
     private graphService: GraphService,
@@ -185,11 +187,7 @@ export class EmailService {
     };
   }
 
-  async syncEmails(
-    user: ClerkUser,
-    oauthToken: string,
-    count: number = 20,
-  ): Promise<SyncResult> {
+  async syncEmails(user: ClerkUser, oauthToken: string): Promise<SyncResult> {
     const existingUserByEmail = await this.prisma.user.findUnique({
       where: { email: user.email },
     });
@@ -198,18 +196,42 @@ export class EmailService {
       await this.prisma.user.delete({ where: { email: user.email } });
     }
 
-    await this.prisma.user.upsert({
+    const dbUser = await this.prisma.user.upsert({
       where: { id: user.userId },
       update: { email: user.email, name: user.name },
       create: { id: user.userId, email: user.email, name: user.name },
     });
 
-    const messages = await this.graphService.fetchRecentEmails(
+    const { messages, deltaLink } = await this.graphService.fetchDelta(
       oauthToken,
-      count,
+      dbUser.deltaLink,
     );
 
-    const threadGroups = this.groupByThread(messages);
+    const isIncremental = !!dbUser.deltaLink;
+
+    this.logger.log(
+      `${isIncremental ? "Incremental" : "Full"} sync: ${messages.length} messages`,
+    );
+
+    await this.prisma.user.update({
+      where: { id: user.userId },
+      data: { deltaLink },
+    });
+
+    const deletedMessages = messages.filter((m) => m["@removed"]);
+    const newOrUpdatedMessages = messages.filter((m) => !m["@removed"]);
+
+    let emailsDeleted = 0;
+    for (const message of deletedMessages) {
+      const deleted = await this.prisma.email.deleteMany({
+        where: { messageId: message.id, userId: user.userId },
+      });
+      emailsDeleted += deleted.count;
+    }
+
+    await this.cleanupEmptyThreads(user.userId);
+
+    const threadGroups = this.groupByThread(newOrUpdatedMessages);
 
     let threadsCreated = 0;
     let threadsUpdated = 0;
@@ -269,46 +291,49 @@ export class EmailService {
 
         if (existingEmail) continue;
 
-        const toRecipients = message.toRecipients.map((r) => ({
+        const toRecipients = (message.toRecipients || []).map((r) => ({
           address: r.emailAddress.address,
           name: r.emailAddress.name,
         }));
 
-        const ccRecipients = message.ccRecipients.map((r) => ({
+        const ccRecipients = (message.ccRecipients || []).map((r) => ({
           address: r.emailAddress.address,
           name: r.emailAddress.name,
         }));
+
+        const attachments = await this.graphService.fetchAttachments(
+          oauthToken,
+          message.id,
+        );
 
         const email = await this.prisma.email.create({
           data: {
             messageId: message.id,
             threadId: thread.id,
             userId: user.userId,
-            fromAddress: message.from.emailAddress.address,
-            fromName: message.from.emailAddress.name || null,
+            fromAddress: message.from?.emailAddress?.address || "unknown",
+            fromName: message.from?.emailAddress?.name || null,
             toRecipients,
             ccRecipients,
-            subject: message.subject,
-            body: message.body.content,
+            subject: message.subject || "(No Subject)",
+            body: message.body?.content || "",
             receivedAt: new Date(message.receivedDateTime),
-            attachmentCount: message.attachments?.length ?? 0,
+            attachmentCount: attachments.length,
           },
         });
 
         emailsSynced++;
 
-        if (message.attachments?.length) {
-          for (const attachment of message.attachments) {
-            await this.prisma.attachment.create({
-              data: {
-                emailId: email.id,
-                filename: attachment.name,
-                mimeType: attachment.contentType,
-                size: attachment.size,
-              },
-            });
-            attachmentsSynced++;
-          }
+        for (const attachment of attachments) {
+          await this.prisma.attachment.create({
+            data: {
+              emailId: email.id,
+              filename: attachment.name,
+              mimeType: attachment.contentType,
+              size: attachment.size,
+            },
+          });
+          attachmentsSynced++;
         }
       }
     }
@@ -317,21 +342,33 @@ export class EmailService {
       threadsCreated,
       threadsUpdated,
       emailsSynced,
+      emailsDeleted,
       attachmentsSynced,
+      isIncremental,
     };
   }
 
+  private async cleanupEmptyThreads(userId: string): Promise<void> {
+    await this.prisma.thread.deleteMany({
+      where: {
+        userId,
+        emails: { none: {} },
+      },
+    });
+  }
+
   private groupByThread(
-    messages: GraphMessage[],
-  ): Record<string, GraphMessage[]> {
+    messages: GraphDeltaMessage[],
+  ): Record<string, GraphDeltaMessage[]> {
     return messages.reduce(
       (acc, message) => {
         const key = message.conversationId;
+        if (!key) return acc;
         if (!acc[key]) acc[key] = [];
         acc[key].push(message);
         return acc;
       },
-      {} as Record<string, GraphMessage[]>,
+      {} as Record<string, GraphDeltaMessage[]>,
     );
   }
 }
