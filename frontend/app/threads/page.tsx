@@ -2,7 +2,7 @@
 
 import { useUser } from "@clerk/nextjs";
 import { useApi, ApiError } from "@/lib/use-api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { redirect } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ export default function ThreadsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { lastSync, updateLastSync } = useLastSync();
+  const fetchedRef = useRef(false);
 
   const fetchThreads = async () => {
     try {
@@ -37,7 +38,8 @@ export default function ThreadsPage() {
   };
 
   useEffect(() => {
-    if (isSignedIn) {
+    if (isSignedIn && !fetchedRef.current) {
+      fetchedRef.current = true;
       fetchThreads();
     }
   }, [isSignedIn]);

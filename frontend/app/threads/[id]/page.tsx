@@ -2,7 +2,7 @@
 
 import { useUser } from "@clerk/nextjs";
 import { useApi, ApiError } from "@/lib/use-api";
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,9 +26,11 @@ export default function ThreadDetailPage({
   const [loading, setLoading] = useState(true);
   const [insightLoading, setInsightLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
-    if (isSignedIn && id) {
+    if (isSignedIn && id && !fetchedRef.current) {
+      fetchedRef.current = true;
       api<ThreadDetail>(`/threads/${id}`)
         .then((data) => {
           setThread(data);
