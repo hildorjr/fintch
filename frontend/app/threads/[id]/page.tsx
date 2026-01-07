@@ -32,9 +32,7 @@ export default function ThreadDetailPage({
       api<ThreadDetail>(`/threads/${id}`)
         .then((data) => {
           setThread(data);
-          if (data.insight) {
-            setInsight(data.insight);
-          } else if (data.emails.length > 0) {
+          if (data.emails.length > 0) {
             setInsightLoading(true);
             api<Insight>(`/threads/${id}/insights`, { method: "POST" })
               .then((insightData) => {
@@ -43,8 +41,12 @@ export default function ThreadDetailPage({
                 }
               })
               .catch((err) => {
-                const message = err instanceof ApiError ? err.message : "Failed to generate insights";
-                toast.error(message);
+                if (data.insight) {
+                  setInsight(data.insight);
+                } else {
+                  const message = err instanceof ApiError ? err.message : "Failed to generate insights";
+                  toast.error(message);
+                }
               })
               .finally(() => setInsightLoading(false));
           }

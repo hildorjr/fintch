@@ -123,27 +123,19 @@ export class EmailService {
       throw new NotFoundException("Thread not found");
     }
 
-    if (thread.insight) {
-      return {
-        summary: thread.insight.summary,
-        participants: thread.insight.participants as string[],
-        topics: thread.insight.topics as string[],
-        actionItems: thread.insight.actionItems as {
-          task: string;
-          owner: string;
-        }[],
-        urgency: thread.insight.urgency,
-        requiresResponse: thread.insight.requiresResponse,
-        attachmentOverview: thread.insight.attachmentOverview as {
-          count: number;
-          types: string[];
-          mentions: string[];
-        },
-      };
-    }
-
     if (thread.emails.length === 0) {
       return null;
+    }
+
+    const newestEmailDate = thread.emails[0]?.receivedAt;
+    const needsRegeneration = !!(
+      thread.insight &&
+      newestEmailDate &&
+      newestEmailDate > thread.insight.updatedAt
+    );
+
+    if (thread.insight && !needsRegeneration) {
+      return this.formatInsight(thread.insight);
     }
 
     const insight = await this.insightService.generateInsight(
@@ -159,12 +151,25 @@ export class EmailService {
           mimeType: a.mimeType,
         })),
       })),
+      needsRegeneration,
     );
 
     if (!insight) {
       return null;
     }
 
+    return this.formatInsight(insight);
+  }
+
+  private formatInsight(insight: {
+    summary: string;
+    participants: unknown;
+    topics: unknown;
+    actionItems: unknown;
+    urgency: string;
+    requiresResponse: boolean;
+    attachmentOverview: unknown;
+  }): InsightResponse {
     return {
       summary: insight.summary,
       participants: insight.participants as string[],

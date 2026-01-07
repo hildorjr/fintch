@@ -37,12 +37,16 @@ export class InsightService {
     });
   }
 
-  async generateInsight(threadId: string, emails: ThreadEmail[]) {
+  async generateInsight(
+    threadId: string,
+    emails: ThreadEmail[],
+    regenerate = false,
+  ) {
     const existing = await this.prisma.threadInsight.findUnique({
       where: { threadId },
     });
 
-    if (existing) {
+    if (existing && !regenerate) {
       return existing;
     }
 
@@ -83,17 +87,25 @@ export class InsightService {
         HIGH: Urgency.HIGH,
       };
 
+      const data = {
+        summary: insight.summary,
+        participants: insight.participants,
+        topics: insight.topics,
+        actionItems: insight.actionItems,
+        urgency: urgencyMap[insight.urgency] || Urgency.LOW,
+        requiresResponse: insight.requiresResponse,
+        attachmentOverview: insight.attachmentOverview,
+      };
+
+      if (existing) {
+        return this.prisma.threadInsight.update({
+          where: { threadId },
+          data,
+        });
+      }
+
       return this.prisma.threadInsight.create({
-        data: {
-          threadId,
-          summary: insight.summary,
-          participants: insight.participants,
-          topics: insight.topics,
-          actionItems: insight.actionItems,
-          urgency: urgencyMap[insight.urgency] || Urgency.LOW,
-          requiresResponse: insight.requiresResponse,
-          attachmentOverview: insight.attachmentOverview,
-        },
+        data: { threadId, ...data },
       });
     } catch (error) {
       this.logger.error("Failed to generate insight", error);
@@ -139,4 +151,3 @@ Respond with a JSON object containing:
 }`;
   }
 }
-
