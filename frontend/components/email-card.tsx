@@ -38,7 +38,7 @@ export function EmailCard({ email }: { email: Email }) {
               {email.attachments.map((att, i) => (
                 <Badge key={i} variant="secondary" className="gap-1">
                   <span>📎</span>
-                  <span>{att.filename}</span>
+                  <span>{att.filename} ({att.mimeType})</span>
                   <span className="text-muted-foreground">
                     ({formatFileSize(att.size)})
                   </span>
