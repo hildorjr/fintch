@@ -1,9 +1,10 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useApi } from "@/lib/use-api";
+import { useApi, ApiError } from "@/lib/use-api";
 import { useState, useEffect } from "react";
 import { redirect } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThreadCard } from "@/components/thread-card";
@@ -18,13 +19,17 @@ export default function ThreadsPage() {
   const [syncing, setSyncing] = useState(false);
   const [threads, setThreads] = useState<ThreadListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { lastSync, updateLastSync } = useLastSync();
 
   const fetchThreads = async () => {
     try {
+      setError(null);
       const data = await api<ThreadListResponse>("/threads");
       setThreads(data.threads);
-    } catch {
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Failed to load threads";
+      setError(message);
       setThreads([]);
     } finally {
       setLoading(false);
@@ -40,11 +45,13 @@ export default function ThreadsPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await api<SyncResult>("/email/sync", { method: "POST" });
+      const result = await api<SyncResult>("/email/sync", { method: "POST" });
       updateLastSync();
+      toast.success(`Synced ${result.emailsSynced} emails`);
       await fetchThreads();
-    } catch (error) {
-      console.error("Sync failed:", error);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Sync failed";
+      toast.error(message);
     } finally {
       setSyncing(false);
     }
@@ -93,6 +100,15 @@ export default function ThreadsPage() {
           <ThreadListSkeleton />
           <ThreadListSkeleton />
         </div>
+      ) : error ? (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="text-destructive mb-4">{error}</p>
+            <Button onClick={fetchThreads} variant="outline">
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
       ) : threads.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">

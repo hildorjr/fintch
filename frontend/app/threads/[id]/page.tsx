@@ -1,9 +1,10 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useApi } from "@/lib/use-api";
+import { useApi, ApiError } from "@/lib/use-api";
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmailCard } from "@/components/email-card";
@@ -41,11 +42,17 @@ export default function ThreadDetailPage({
                   setInsight(insightData);
                 }
               })
-              .catch(() => {})
+              .catch((err) => {
+                const message = err instanceof ApiError ? err.message : "Failed to generate insights";
+                toast.error(message);
+              })
               .finally(() => setInsightLoading(false));
           }
         })
-        .catch(() => setError("Failed to load thread"))
+        .catch((err) => {
+          const message = err instanceof ApiError ? err.message : "Failed to load thread";
+          setError(message);
+        })
         .finally(() => setLoading(false));
     }
   }, [isSignedIn, id]);

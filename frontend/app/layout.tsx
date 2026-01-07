@@ -10,6 +10,7 @@ import {
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -68,6 +69,7 @@ export default function RootLayout({
             </div>
           </header>
           <main className="container py-6">{children}</main>
+          <Toaster richColors position="bottom-right" />
         </body>
       </html>
     </ClerkProvider>

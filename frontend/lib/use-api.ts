@@ -5,6 +5,16 @@ import { useCallback } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export function useApi() {
   const { getToken } = useAuth();
 
@@ -22,7 +32,16 @@ export function useApi() {
       });
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        let message = `Request failed (${response.status})`;
+        try {
+          const data = await response.json();
+          if (data.message) {
+            message = Array.isArray(data.message)
+              ? data.message.join(", ")
+              : data.message;
+          }
+        } catch {}
+        throw new ApiError(response.status, message);
       }
 
       return response.json();
@@ -32,4 +51,3 @@ export function useApi() {
 
   return { api };
 }
-
