@@ -1,10 +1,5 @@
-"use client";
-
-import { useUser } from "@clerk/nextjs";
-import { useApi, ApiError } from "@/lib/use-api";
-import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
+import { api, ApiError } from "@/lib/api-server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmailCard } from "@/components/email-card";
@@ -12,71 +7,24 @@ import { InsightCard, InsightSkeleton } from "@/components/insight-card";
 import { ThreadDetailSkeleton } from "@/components/skeletons";
 import { formatDateTime } from "@/lib/utils";
 import type { ThreadDetail, Insight } from "@/lib/types";
+import { GenerateInsightButton } from "@/components/generate-insight-button";
 
-export default function ThreadDetailPage({
+export const revalidate = 60;
+
+export default async function ThreadDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = use(params);
-  const { isLoaded, isSignedIn } = useUser();
-  const { api } = useApi();
-  const [thread, setThread] = useState<ThreadDetail | null>(null);
-  const [insight, setInsight] = useState<Insight | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [insightLoading, setInsightLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fetchedRef = useRef(false);
+  const { id } = await params;
 
-  useEffect(() => {
-    if (isSignedIn && id && !fetchedRef.current) {
-      fetchedRef.current = true;
-      api<ThreadDetail>(`/threads/${id}`)
-        .then((data) => {
-          setThread(data);
-          if (data.emails.length > 0) {
-            setInsightLoading(true);
-            api<Insight>(`/threads/${id}/insights`, { method: "POST" })
-              .then((insightData) => {
-                if (insightData) {
-                  setInsight(insightData);
-                }
-              })
-              .catch((err) => {
-                if (data.insight) {
-                  setInsight(data.insight);
-                } else {
-                  const message = err instanceof ApiError ? err.message : "Failed to generate insights";
-                  toast.error(message);
-                }
-              })
-              .finally(() => setInsightLoading(false));
-          }
-        })
-        .catch((err) => {
-          const message = err instanceof ApiError ? err.message : "Failed to load thread";
-          setError(message);
-        })
-        .finally(() => setLoading(false));
-    }
-  }, [isSignedIn, id]);
+  let thread: ThreadDetail | null = null;
+  let error: string | null = null;
 
-  if (!isLoaded || loading) {
-    return (
-      <div className="max-w-3xl mx-auto">
-        <ThreadDetailSkeleton />
-      </div>
-    );
-  }
-
-  if (!isSignedIn) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-muted-foreground">
-          Please sign in to view this thread.
-        </p>
-      </div>
-    );
+  try {
+    thread = await api<ThreadDetail>(`/threads/${id}`, {}, { tags: [`thread-${id}`] });
+  } catch (err) {
+    error = err instanceof ApiError ? err.message : "Failed to load thread";
   }
 
   if (error || !thread) {
@@ -110,10 +58,10 @@ export default function ThreadDetailPage({
       </div>
 
       <div className="flex flex-col gap-6">
-        {insight ? (
-          <InsightCard insight={insight} />
-        ) : insightLoading ? (
-          <InsightSkeleton />
+        {thread.insight ? (
+          <InsightCard insight={thread.insight} />
+        ) : thread.emails.length > 0 ? (
+          <GenerateInsightButton threadId={id} />
         ) : null}
 
         <div>

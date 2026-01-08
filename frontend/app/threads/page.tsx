@@ -1,114 +1,55 @@
-"use client";
-
-import { useUser } from "@clerk/nextjs";
-import { useApi, ApiError } from "@/lib/use-api";
-import { useState, useEffect, useRef } from "react";
-import { toast } from "sonner";
+import { currentUser } from "@clerk/nextjs/server";
+import { api, ApiError } from "@/lib/api-server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThreadCard } from "@/components/thread-card";
 import { ThreadListSkeleton } from "@/components/skeletons";
-import { formatRelativeTime } from "@/lib/utils";
-import { useLastSync } from "@/lib/use-last-sync";
-import type { ThreadListItem, ThreadListResponse, SyncResult } from "@/lib/types";
+import { SyncButton } from "@/components/sync-button";
+import type { ThreadListResponse } from "@/lib/types";
 
-export default function ThreadsPage() {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const { api } = useApi();
-  const [syncing, setSyncing] = useState(false);
-  const [threads, setThreads] = useState<ThreadListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { lastSync, updateLastSync } = useLastSync();
-  const fetchedRef = useRef(false);
+export const revalidate = 60;
 
-  const fetchThreads = async () => {
-    try {
-      setError(null);
-      const data = await api<ThreadListResponse>("/threads");
-      setThreads(data.threads);
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Failed to load threads";
-      setError(message);
-      setThreads([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+export default async function ThreadsPage() {
+  const user = await currentUser();
+  const userName = user?.firstName || user?.emailAddresses[0]?.emailAddress || "User";
 
-  useEffect(() => {
-    if (isSignedIn && !fetchedRef.current) {
-      fetchedRef.current = true;
-      fetchThreads();
-    }
-  }, [isSignedIn]);
+  let threads: ThreadListResponse["threads"] = [];
+  let error: string | null = null;
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const result = await api<SyncResult>("/email/sync", { method: "POST" });
-      updateLastSync();
-      const syncType = result.isIncremental ? "Incremental" : "Full";
-      const parts = [];
-      if (result.emailsSynced > 0) parts.push(`${result.emailsSynced} new`);
-      if (result.emailsDeleted > 0) parts.push(`${result.emailsDeleted} deleted`);
-      const message = parts.length > 0 ? parts.join(", ") : "No changes";
-      toast.success(`${syncType} sync: ${message}`);
-      await fetchThreads();
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Sync failed";
-      toast.error(message);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+  try {
+    const data = await api<ThreadListResponse>("/threads", {}, { tags: ["threads"] });
+    threads = data.threads;
+  } catch (err) {
+    error = err instanceof ApiError ? err.message : "Failed to load threads";
   }
 
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">
-            Welcome, {user?.firstName || user?.emailAddresses[0]?.emailAddress || "User"}
-          </h1>
+          <h1 className="text-2xl font-bold">Welcome, {userName}</h1>
           <p className="text-muted-foreground">
             Your email threads and AI insights
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="flex flex-col items-center gap-1">
-            <Button onClick={handleSync} disabled={syncing}>
-              {syncing ? "Syncing..." : "Sync Emails"}
-            </Button>
-            {lastSync && (
-              <span className="text-xs text-muted-foreground">
-                Synced {formatRelativeTime(lastSync)}
-              </span>
-            )}
-          </div>
+          <SyncButton />
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          <ThreadListSkeleton />
-          <ThreadListSkeleton />
-          <ThreadListSkeleton />
-        </div>
-      ) : error ? (
+      {error ? (
         <Card>
           <CardContent className="p-8 text-center">
             <p className="text-destructive mb-4">{error}</p>
-            <Button onClick={fetchThreads} variant="outline">
-              Try Again
-            </Button>
+            <form action={async () => {
+              "use server";
+              const { revalidatePath } = await import("next/cache");
+              revalidatePath("/threads");
+            }}>
+              <Button type="submit" variant="outline">
+                Try Again
+              </Button>
+            </form>
           </CardContent>
         </Card>
       ) : threads.length === 0 ? (
@@ -117,9 +58,7 @@ export default function ThreadsPage() {
             <p className="text-muted-foreground mb-4">
               No threads yet. Click "Sync Emails" to fetch your emails.
             </p>
-            <Button onClick={handleSync} disabled={syncing}>
-              {syncing ? "Syncing..." : "Sync Emails"}
-            </Button>
+            <SyncButton />
           </CardContent>
         </Card>
       ) : (
