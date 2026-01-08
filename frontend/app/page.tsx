@@ -1,23 +1,9 @@
 "use client";
 
-import { useUser, SignInButton } from "@clerk/nextjs";
-import { redirect } from "next/navigation";
+import { SignInButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
-  const { isLoaded, isSignedIn } = useUser();
-
-  if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  if (isSignedIn) {
-    redirect("/threads");
-  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center">

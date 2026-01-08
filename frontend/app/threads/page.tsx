@@ -3,7 +3,6 @@
 import { useUser } from "@clerk/nextjs";
 import { useApi, ApiError } from "@/lib/use-api";
 import { useState, useEffect, useRef } from "react";
-import { redirect } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -72,16 +71,12 @@ export default function ThreadsPage() {
     );
   }
 
-  if (!isSignedIn) {
-    redirect("/");
-  }
-
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">
-            Welcome, {user.firstName || user.emailAddresses[0]?.emailAddress}
+            Welcome, {user?.firstName || user?.emailAddresses[0]?.emailAddress || "User"}
           </h1>
           <p className="text-muted-foreground">
             Your email threads and AI insights
