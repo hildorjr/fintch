@@ -59,6 +59,7 @@ PORT=3001
 ```env
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
 NEXT_PUBLIC_API_URL="http://localhost:3001"
+CLERK_SECRET_KEY=
 ```
 
 ### 4. Clerk Configuration
